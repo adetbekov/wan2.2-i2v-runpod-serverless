@@ -8,43 +8,103 @@ import uuid
 import logging
 import urllib.request
 import urllib.parse
-import binascii # Base64 에러 처리를 위해 import
-# 로깅 설정
+import binascii # For Base64 error handling
+import time
+import shutil # For file copying
+# Logging configuration
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
 server_address = os.getenv('SERVER_ADDRESS', '127.0.0.1')
 client_id = str(uuid.uuid4())
-def save_data_if_base64(data_input, temp_dir, output_filename):
+
+# ComfyUI input directory path
+COMFYUI_INPUT_DIR = "/ComfyUI/input"
+
+def process_image_path(image_path, task_id):
     """
-    입력 데이터가 Base64 문자열인지 확인하고, 맞다면 파일로 저장 후 경로를 반환합니다.
-    만약 일반 경로 문자열이라면 그대로 반환합니다.
+    Processes image_path input. Supports the following:
+    1. HTTP/HTTPS URL - Downloads and saves to ComfyUI input directory
+    2. Local file path - Copies to ComfyUI input directory
+
+    Returns: Filename that ComfyUI can use
     """
-    # 입력값이 문자열이 아니면 그대로 반환
-    if not isinstance(data_input, str):
-        return data_input
+    if not isinstance(image_path, str):
+        raise ValueError("image_path must be a string")
+
+    # Check for URL (starts with http:// or https://)
+    if image_path.startswith('http://') or image_path.startswith('https://'):
+        logger.info(f"Downloading image from URL: {image_path}")
+        try:
+            # Extract file extension from URL (default to .jpg if not found)
+            ext = os.path.splitext(urllib.parse.urlparse(image_path).path)[1] or '.jpg'
+            filename = f"{task_id}_input{ext}"
+            file_path = os.path.join(COMFYUI_INPUT_DIR, filename)
+
+            # Create directory if it doesn't exist
+            os.makedirs(COMFYUI_INPUT_DIR, exist_ok=True)
+
+            # Download image from URL
+            urllib.request.urlretrieve(image_path, file_path)
+            logger.info(f"Downloaded image to: {file_path}")
+            return filename  # ComfyUI only needs the filename within input directory
+        except Exception as e:
+            raise ValueError(f"Failed to download image from URL: {e}")
+
+    # Treat as local file path - copy to ComfyUI input directory
+    logger.info(f"Processing local file path: {image_path}")
+
+    if not os.path.exists(image_path):
+        raise ValueError(f"Image file not found: {image_path}")
+
+    # Extract file extension
+    ext = os.path.splitext(image_path)[1] or '.jpg'
+    filename = f"{task_id}_input{ext}"
+    file_path = os.path.join(COMFYUI_INPUT_DIR, filename)
+
+    # Create directory if it doesn't exist
+    os.makedirs(COMFYUI_INPUT_DIR, exist_ok=True)
+
+    # Copy file to ComfyUI input directory
+    shutil.copy2(image_path, file_path)
+    logger.info(f"Copied local file to: {file_path}")
+
+    return filename  # ComfyUI only needs the filename within input directory
+
+def process_image_base64(image_base64, task_id):
+    """
+    Processes Base64 image input.
+    Decodes and saves to ComfyUI input directory.
+
+    Returns: Filename that ComfyUI can use
+    """
+    if not isinstance(image_base64, str):
+        raise ValueError("image_base64 must be a string")
 
     try:
-        # Base64 문자열은 디코딩을 시도하면 성공합니다.
-        decoded_data = base64.b64decode(data_input)
-        
-        # 디렉토리가 존재하지 않으면 생성
-        os.makedirs(temp_dir, exist_ok=True)
-        
-        # 디코딩에 성공하면, 임시 파일로 저장합니다.
-        file_path = os.path.abspath(os.path.join(temp_dir, output_filename))
-        with open(file_path, 'wb') as f: # 바이너리 쓰기 모드('wb')로 저장
-            f.write(decoded_data)
-        
-        # 저장된 파일의 경로를 반환합니다.
-        print(f"✅ Base64 입력을 '{file_path}' 파일로 저장했습니다.")
-        return file_path
+        # Remove data URI prefix if present (e.g., "data:image/jpeg;base64,")
+        if image_base64.startswith('data:'):
+            image_base64 = image_base64.split(',', 1)[1]
 
-    except (binascii.Error, ValueError):
-        # 디코딩에 실패하면, 일반 경로로 간주하고 원래 값을 그대로 반환합니다.
-        print(f"➡️ '{data_input}'은(는) 파일 경로로 처리합니다.")
-        return data_input
+        # Attempt base64 decoding
+        decoded_data = base64.b64decode(image_base64, validate=True)
+
+        # Save to file
+        filename = f"{task_id}_input.jpg"
+        file_path = os.path.join(COMFYUI_INPUT_DIR, filename)
+
+        # Create directory if it doesn't exist
+        os.makedirs(COMFYUI_INPUT_DIR, exist_ok=True)
+
+        with open(file_path, 'wb') as f:
+            f.write(decoded_data)
+
+        logger.info(f"Saved base64 image to: {file_path}")
+        return filename  # ComfyUI only needs the filename within input directory
+
+    except (binascii.Error, ValueError) as e:
+        raise ValueError(f"Failed to decode base64 image: {e}")
     
 def queue_prompt(prompt):
     url = f"http://{server_address}:8188/prompt"
@@ -88,7 +148,7 @@ def get_videos(ws, prompt):
         videos_output = []
         if 'gifs' in node_output:
             for video in node_output['gifs']:
-                # fullpath를 이용하여 직접 파일을 읽고 base64로 인코딩
+                # Read file directly using fullpath and encode to base64
                 with open(video['fullpath'], 'rb') as f:
                     video_data = base64.b64encode(f.read()).decode('utf-8')
                 videos_output.append(video_data)
@@ -106,33 +166,34 @@ def handler(job):
     logger.info(f"Received job input: {job_input}")
     task_id = f"task_{uuid.uuid4()}"
 
-    # image_input = job_input["image_path"]
-    
+    # Process image input: either image_path (URL or local path) or image_base64
     image_path_input = job_input.get("image_path")
     image_base64_input = job_input.get("image_base64")
-    # 헬퍼 함수를 사용해 이미지 파일 경로 확보 (Base64 또는 Path)
-    # 이미지 확장자를 알 수 없으므로 .jpg로 가정하거나, 입력에서 받아야 합니다.
-    if image_path_input:
-        if image_path_input == "/example_image.png":
-            image_path = "/example_image.png"
+
+    # Ensure at least one image input is provided
+    if not image_path_input and not image_base64_input:
+        return {"error": "Either image_path or image_base64 is required"}
+
+    # Ensure only one image input is provided
+    if image_path_input and image_base64_input:
+        return {"error": "Please provide either image_path or image_base64, not both"}
+
+    try:
+        if image_base64_input:
+            # Process Base64 image
+            image_filename = process_image_base64(image_base64_input, task_id)
+            logger.info(f"Processed base64 image: {image_filename}")
         else:
-            image_path = image_path_input
-    else:
-        # Base64인 경우 디코딩하여 저장
-        try:
-            os.makedirs(task_id, exist_ok=True)
-            image_path = os.path.join(task_id, "input_image.jpg")
-            decoded_data = base64.b64decode(image_base64_input)
-            with open(image_path, 'wb') as f:
-                f.write(decoded_data)
-            logger.info(f"Base64 비디오를 '{image_path}' 파일로 저장했습니다.")
-        except Exception as e:
-            return {"error": f"Base64 이미지 디코딩 실패: {e}"}
-    
-    # LoRA 설정 확인 - 배열로 받아서 처리
+            # Process image path (URL or local file)
+            image_filename = process_image_path(image_path_input, task_id)
+            logger.info(f"Processed image path: {image_filename}")
+    except Exception as e:
+        return {"error": f"Failed to process image: {e}"}
+
+    # Check LoRA settings - process as array
     lora_pairs = job_input.get("lora_pairs", [])
-    
-    # LoRA 개수에 따라 적절한 워크플로우 파일 선택
+
+    # Select appropriate workflow file based on LoRA count
     lora_count = len(lora_pairs)
     if lora_count == 0:
         workflow_file = "/wan22_nolora.json"
@@ -147,35 +208,35 @@ def handler(job):
         workflow_file = "/wan22_3lora.json"
         logger.info("Using 3 LoRA pairs workflow")
     else:
-        logger.warning(f"LoRA 개수가 {lora_count}개입니다. 최대 3개까지만 지원됩니다. 3개로 제한합니다.")
+        logger.warning(f"LoRA count is {lora_count}. Maximum 3 are supported. Limiting to 3.")
         lora_count = 3
         workflow_file = "/wan22_3lora.json"
-        lora_pairs = lora_pairs[:3]  # 처음 3개만 사용
+        lora_pairs = lora_pairs[:3]  # Use only first 3
     
     prompt = load_workflow(workflow_file)
     
     length = job_input.get("length", 81)
     steps = job_input.get("steps", 10)
 
-    prompt["260"]["inputs"]["image"] = image_path
+    prompt["260"]["inputs"]["image"] = image_filename
     prompt["846"]["inputs"]["value"] = length
     prompt["246"]["inputs"]["value"] = job_input["prompt"]
     prompt["835"]["inputs"]["noise_seed"] = job_input["seed"]
     prompt["830"]["inputs"]["cfg"] = job_input["cfg"]
     prompt["849"]["inputs"]["value"] = job_input["width"]
     prompt["848"]["inputs"]["value"] = job_input["height"]
-    
-    # step 설정 적용
+
+    # Apply step settings
     if "834" in prompt:
         prompt["834"]["inputs"]["steps"] = steps
         logger.info(f"Steps set to: {steps}")
         lowsteps = int(steps*0.6)
         prompt["829"]["inputs"]["step"] = lowsteps
         logger.info(f"LowSteps set to: {lowsteps}")
-    
-    # LoRA 설정 적용
+
+    # Apply LoRA settings
     if lora_count > 0:
-        # LoRA 노드 ID 매핑 (각 워크플로우에서 LoRA 노드 ID가 다름)
+        # LoRA node ID mapping (LoRA node IDs differ in each workflow)
         lora_node_mapping = {
             1: {
                 "high": ["282"],
@@ -199,16 +260,16 @@ def handler(job):
                 lora_low = lora_pair.get("low")
                 lora_high_weight = lora_pair.get("high_weight", 1.0)
                 lora_low_weight = lora_pair.get("low_weight", 1.0)
-                
-                # HIGH LoRA 설정
+
+                # HIGH LoRA settings
                 if i < len(current_mapping["high"]):
                     high_node_id = current_mapping["high"][i]
                     if high_node_id in prompt and lora_high:
                         prompt[high_node_id]["inputs"]["lora_name"] = lora_high
                         prompt[high_node_id]["inputs"]["strength_model"] = lora_high_weight
                         logger.info(f"LoRA {i+1} HIGH applied: {lora_high} with weight {lora_high_weight}")
-                
-                # LOW LoRA 설정
+
+                # LOW LoRA settings
                 if i < len(current_mapping["low"]):
                     low_node_id = current_mapping["low"][i]
                     if low_node_id in prompt and lora_low:
@@ -218,47 +279,45 @@ def handler(job):
 
     ws_url = f"ws://{server_address}:8188/ws?clientId={client_id}"
     logger.info(f"Connecting to WebSocket: {ws_url}")
-    
-    # 먼저 HTTP 연결이 가능한지 확인
+
+    # First, check if HTTP connection is available
     http_url = f"http://{server_address}:8188/"
     logger.info(f"Checking HTTP connection to: {http_url}")
-    
-    # HTTP 연결 확인 (최대 1분)
+
+    # Check HTTP connection (max 3 minutes)
     max_http_attempts = 180
     for http_attempt in range(max_http_attempts):
         try:
-            import urllib.request
             response = urllib.request.urlopen(http_url, timeout=5)
-            logger.info(f"HTTP 연결 성공 (시도 {http_attempt+1})")
+            logger.info(f"HTTP connection successful (attempt {http_attempt+1})")
             break
         except Exception as e:
-            logger.warning(f"HTTP 연결 실패 (시도 {http_attempt+1}/{max_http_attempts}): {e}")
+            logger.warning(f"HTTP connection failed (attempt {http_attempt+1}/{max_http_attempts}): {e}")
             if http_attempt == max_http_attempts - 1:
-                raise Exception("ComfyUI 서버에 연결할 수 없습니다. 서버가 실행 중인지 확인하세요.")
+                raise Exception("Cannot connect to ComfyUI server. Please check if the server is running.")
             time.sleep(1)
-    
+
     ws = websocket.WebSocket()
-    # 웹소켓 연결 시도 (최대 3분)
-    max_attempts = int(180/5)  # 3분 (1초에 한 번씩 시도)
+    # Attempt WebSocket connection (max 3 minutes)
+    max_attempts = int(180/5)  # 3 minutes (attempt every 5 seconds)
     for attempt in range(max_attempts):
-        import time
         try:
             ws.connect(ws_url)
-            logger.info(f"웹소켓 연결 성공 (시도 {attempt+1})")
+            logger.info(f"WebSocket connection successful (attempt {attempt+1})")
             break
         except Exception as e:
-            logger.warning(f"웹소켓 연결 실패 (시도 {attempt+1}/{max_attempts}): {e}")
+            logger.warning(f"WebSocket connection failed (attempt {attempt+1}/{max_attempts}): {e}")
             if attempt == max_attempts - 1:
-                raise Exception("웹소켓 연결 시간 초과 (3분)")
+                raise Exception("WebSocket connection timeout (3 minutes)")
             time.sleep(5)
     videos = get_videos(ws, prompt)
     ws.close()
 
-    # 이미지가 없는 경우 처리
+    # Handle case when no videos are found
     for node_id in videos:
         if videos[node_id]:
             return {"video": videos[node_id][0]}
-    
-    return {"error": "비디오를를 찾을 수 없습니다."}
+
+    return {"error": "No videos found."}
 
 runpod.serverless.start({"handler": handler})

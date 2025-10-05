@@ -34,13 +34,15 @@ Wan22는 정적 이미지를 자연스러운 움직임과 사실적인 애니메
 
 ### 입력
 
-`input` 객체는 다음 필드를 포함해야 합니다. 이미지는 **경로 또는 Base64** 중 하나의 방법으로 입력할 수 있습니다.
+`input` 객체는 다음 필드를 포함해야 합니다.
 
 #### 이미지 입력 (하나만 사용)
 | 매개변수 | 타입 | 필수 | 기본값 | 설명 |
 | --- | --- | --- | --- | --- |
-| `image_path` | `string` | 아니오 | `/example_image.png` | 입력 이미지의 로컬 경로 |
-| `image_base64` | `string` | 아니오 | `/example_image.png` | 입력 이미지의 Base64 인코딩된 문자열 |
+| `image_path` | `string` | 아니오* | - | 입력 이미지 소스. 다음을 지원:<br>1. **HTTP/HTTPS URL**: 이미지가 다운로드됩니다 (예: `"https://example.com/image.jpg"`)<br>2. **로컬 파일 경로**: 네트워크 볼륨의 이미지 경로 (예: `"/my_volume/image.jpg"`) |
+| `image_base64` | `string` | 아니오* | - | Base64로 인코딩된 이미지 문자열. 데이터 URI 접두사 있거나 없이 지원 (예: `"/9j/4AAQSkZJRg..."` 또는 `"data:image/jpeg;base64,/9j/4AAQSkZJRg..."`) |
+
+**참고**: `image_path` 또는 `image_base64` 중 하나는 필수이지만, 둘 다 제공할 수 없습니다.
 
 #### LoRA 설정
 | 매개변수 | 타입 | 필수 | 기본값 | 설명 |
@@ -70,7 +72,7 @@ Wan22는 정적 이미지를 자연스러운 움직임과 사실적인 애니메
 
 **요청 예시:**
 
-#### 1. 기본 생성 (LoRA 없음)
+#### 1. 로컬 파일 경로 사용
 ```json
 {
   "input": {
@@ -86,12 +88,26 @@ Wan22는 정적 이미지를 자연스러운 움직임과 사실적인 애니메
 }
 ```
 
-#### 2. LoRA 쌍 사용
+#### 2. HTTP URL 사용
 ```json
 {
   "input": {
     "prompt": "사람이 자연스럽게 걷는 모습.",
-    "image_base64": "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD...",
+    "image_path": "https://example.com/images/portrait.jpg",
+    "seed": 12345,
+    "cfg": 7.5,
+    "width": 512,
+    "height": 512
+  }
+}
+```
+
+#### 3. Base64 문자열 사용
+```json
+{
+  "input": {
+    "prompt": "사람이 자연스럽게 걷는 모습.",
+    "image_path": "/9j/4AAQSkZJRgABAQAAAQABAAD...",
     "seed": 12345,
     "cfg": 7.5,
     "width": 512,
@@ -108,7 +124,7 @@ Wan22는 정적 이미지를 자연스러운 움직임과 사실적인 애니메
 }
 ```
 
-#### 3. 여러 LoRA 쌍 (최대 3개)
+#### 4. 여러 LoRA 쌍 (최대 3개)
 ```json
 {
   "input": {

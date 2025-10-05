@@ -31,13 +31,15 @@ This template includes all the necessary components to run Wan22 as a RunPod Ser
 
 ### Input
 
-The `input` object must contain the following fields. Images can be input using **path or Base64** - one method for each.
+The `input` object must contain the following fields.
 
 #### Image Input (use only one)
 | Parameter | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- |
-| `image_path` | `string` | No | `/example_image.png` | Local path to the input image |
-| `image_base64` | `string` | No | `/example_image.png` | Base64 encoded string of the input image |
+| `image_path` | `string` | No* | - | Input image source. Supports:<br>1. **HTTP/HTTPS URL**: Image will be downloaded (e.g., `"https://example.com/image.jpg"`)<br>2. **Local file path**: Path to image in network volume (e.g., `"/my_volume/image.jpg"`) |
+| `image_base64` | `string` | No* | - | Base64 encoded image string. Supports with or without data URI prefix (e.g., `"/9j/4AAQSkZJRg..."` or `"data:image/jpeg;base64,/9j/4AAQSkZJRg..."`) |
+
+**Note**: Either `image_path` or `image_base64` is required, but not both.
 
 #### LoRA Configuration
 | Parameter | Type | Required | Default | Description |
@@ -67,7 +69,7 @@ The `input` object must contain the following fields. Images can be input using 
 
 **Request Examples:**
 
-#### 1. Basic Generation (No LoRA)
+#### 1. Using Local File Path
 ```json
 {
   "input": {
@@ -83,12 +85,26 @@ The `input` object must contain the following fields. Images can be input using 
 }
 ```
 
-#### 2. With LoRA Pairs
+#### 2. Using HTTP URL
 ```json
 {
   "input": {
     "prompt": "A person walking in a natural way.",
-    "image_base64": "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD...",
+    "image_path": "https://example.com/images/portrait.jpg",
+    "seed": 12345,
+    "cfg": 7.5,
+    "width": 512,
+    "height": 512
+  }
+}
+```
+
+#### 3. Using Base64 String
+```json
+{
+  "input": {
+    "prompt": "A person walking in a natural way.",
+    "image_path": "/9j/4AAQSkZJRgABAQAAAQABAAD...",
     "seed": 12345,
     "cfg": 7.5,
     "width": 512,
@@ -105,7 +121,7 @@ The `input` object must contain the following fields. Images can be input using 
 }
 ```
 
-#### 3. Multiple LoRA Pairs (up to 3)
+#### 4. Multiple LoRA Pairs (up to 3)
 ```json
 {
   "input": {
