@@ -53,4 +53,13 @@ COPY . .
 COPY extra_model_paths.yaml /ComfyUI/extra_model_paths.yaml
 RUN chmod +x /entrypoint.sh
 
+# Set environment variables for CUDA compatibility
+ENV CUDA_LAUNCH_BLOCKING=1
+ENV TORCH_COMPILE_DISABLE=1
+ENV DISABLE_SAGE_ATTENTION=1
+ENV COMFYUI_DISABLE_OPTIMIZATION=1
+
+# Fix SageAttention compatibility with A100 GPUs
+RUN sed -i 's/optimized_attention = attention_sage/optimized_attention = attention_xformers/g' /ComfyUI/custom_nodes/ComfyUI-KJNodes/nodes/model_optimization_nodes.py
+
 CMD ["/entrypoint.sh"]

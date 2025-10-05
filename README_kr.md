@@ -32,6 +32,17 @@ Wan22는 정적 이미지를 자연스러운 움직임과 사실적인 애니메
 *   **wan22_2lora.json**: 2개 LoRA 쌍으로 이미지-투-비디오 생성을 위한 워크플로우
 *   **wan22_3lora.json**: 3개 LoRA 쌍으로 이미지-투-비디오 생성을 위한 워크플로우
 
+### GPU 호환성
+
+이 템플릿은 **NVIDIA A100 GPU**에 최적화되어 있으며 CUDA 호환성 문제에 대한 포괄적인 수정 사항이 포함되어 있습니다:
+
+- **SageAttention 수정**: ComfyUI-KJNodes가 sage attention 대신 xformers attention을 사용하도록 자동으로 구성
+- **환경 변수**: 커널 오류를 방지하기 위한 CUDA 호환성 플래그 설정:
+  - `CUDA_LAUNCH_BLOCKING=1` - 더 나은 오류 보고를 위한 동기 CUDA 작업 활성화
+  - `TORCH_COMPILE_DISABLE=1` - 문제를 일으킬 수 있는 PyTorch 컴파일 비활성화
+  - `DISABLE_SAGE_ATTENTION=1` - SageAttention 명시적으로 비활성화
+  - `COMFYUI_DISABLE_OPTIMIZATION=1` - 호환되지 않을 수 있는 공격적인 최적화 비활성화
+
 ### 입력
 
 `input` 객체는 다음 필드를 포함해야 합니다.
