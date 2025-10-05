@@ -36,7 +36,10 @@ Wan22는 정적 이미지를 자연스러운 움직임과 사실적인 애니메
 
 이 템플릿은 **NVIDIA A100 GPU**에 최적화되어 있으며 CUDA 호환성 문제에 대한 포괄적인 수정 사항이 포함되어 있습니다:
 
-- **SageAttention 수정**: ComfyUI-KJNodes가 sage attention 대신 xformers attention을 사용하도록 자동으로 구성
+- **SageAttention 수정**: ComfyUI-KJNodes에서 SageAttention을 자동으로 비활성화
+  - SageAttention 호출을 `pass` 문으로 대체하여 실행 방지
+  - 시스템이 기본 PyTorch attention 메커니즘으로 폴백하도록 허용
+  - CUDA 커널 오류 및 NameError 문제 모두 방지
 - **환경 변수**: 커널 오류를 방지하기 위한 CUDA 호환성 플래그 설정:
   - `CUDA_LAUNCH_BLOCKING=1` - 더 나은 오류 보고를 위한 동기 CUDA 작업 활성화
   - `TORCH_COMPILE_DISABLE=1` - 문제를 일으킬 수 있는 PyTorch 컴파일 비활성화

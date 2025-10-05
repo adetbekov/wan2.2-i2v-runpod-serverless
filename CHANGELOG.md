@@ -22,8 +22,10 @@ All notable changes to this project will be documented in this file.
 ### Fixed
 - **Critical Fix**: Resolved SageAttention CUDA compatibility issue on A100 GPUs
   - Fixed `RuntimeError: CUDA error: no kernel image is available for execution on device`
-  - Modified ComfyUI-KJNodes to use xformers attention instead of sage attention
+  - Fixed `NameError: name 'attention_xformers' is not defined`
+  - Disabled SageAttention patching in ComfyUI-KJNodes by replacing calls with `pass` statements
   - Added environment variables to disable problematic optimizations (`CUDA_LAUNCH_BLOCKING`, `TORCH_COMPILE_DISABLE`, `DISABLE_SAGE_ATTENTION`, `COMFYUI_DISABLE_OPTIMIZATION`)
+  - System now uses default PyTorch attention mechanism which is fully compatible with A100
   - A100 GPUs don't support FP8 kernels used by SageAttention
 - **Critical Fix**: Resolved "Invalid image file" error when using Base64 images
   - Images are now saved to ComfyUI's expected input directory
