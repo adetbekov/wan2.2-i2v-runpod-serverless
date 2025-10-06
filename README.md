@@ -33,10 +33,11 @@ This template includes all the necessary components to run Wan22 as a RunPod Ser
 
 This template is optimized for **NVIDIA A100 GPUs** and includes comprehensive fixes for CUDA compatibility issues:
 
-- **SageAttention Fix**: Automatically disables SageAttention in ComfyUI-KJNodes
-  - Replaces SageAttention calls with `pass` statements to prevent execution
-  - Allows system to fall back to default PyTorch attention mechanism
-  - Prevents both CUDA kernel errors and NameError issues
+- **SageAttention Fix**: Prevents SageAttentionNode from being registered in ComfyUI
+  - Removes node from NODE_CLASS_MAPPINGS during Docker build
+  - Clean architectural solution that prevents the node from loading entirely
+  - No runtime patching or function replacement needed
+  - System uses default PyTorch attention mechanism (fully A100 compatible)
 - **Environment Variables**: Sets CUDA compatibility flags to prevent kernel errors:
   - `CUDA_LAUNCH_BLOCKING=1` - Enables synchronous CUDA operations for better error reporting
   - `TORCH_COMPILE_DISABLE=1` - Disables PyTorch compilation that may cause issues

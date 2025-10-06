@@ -59,9 +59,26 @@ ENV TORCH_COMPILE_DISABLE=1
 ENV DISABLE_SAGE_ATTENTION=1
 ENV COMFYUI_DISABLE_OPTIMIZATION=1
 
-# Fix SageAttention compatibility with A100 GPUs - disable SageAttention patching
-# This prevents the NameError by disabling SageAttention calls entirely
-RUN sed -i 's/self\._patch_modules(False, sage_attention)/pass  # SageAttention disabled for A100 compatibility/g' /ComfyUI/custom_nodes/ComfyUI-KJNodes/nodes/model_optimization_nodes.py && \
-    sed -i 's/self\._patch_modules(True, sage_attention)/pass  # SageAttention disabled for A100 compatibility/g' /ComfyUI/custom_nodes/ComfyUI-KJNodes/nodes/model_optimization_nodes.py || true
+# Disable SageAttention node entirely by preventing it from being registered
+# This is a clean solution that prevents the node from loading at all
+RUN python3 << 'EOF'
+import os
+file_path = "/ComfyUI/custom_nodes/ComfyUI-KJNodes/nodes/model_optimization_nodes.py"
+
+with open(file_path, 'r') as f:
+    content = f.read()
+
+# Remove SageAttentionNode from NODE_CLASS_MAPPINGS
+# This prevents the node from being loaded at all
+content = content.replace(
+    '"SageAttention": SageAttentionNode,',
+    '# "SageAttention": SageAttentionNode,  # Disabled for A100 compatibility'
+)
+
+with open(file_path, 'w') as f:
+    f.write(content)
+
+print("✅ SageAttention node disabled")
+EOF
 
 CMD ["/entrypoint.sh"]
